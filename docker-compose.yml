@@ -1,0 +1,63 @@
+version: "3.3"
+   
+services:
+  db:
+    image: postgres
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    env_file:
+      - postgres.env
+    ports:
+      - "5432:5432"
+  pgadmin:
+    container_name: pgadmin4_container
+    image: dpage/pgadmin4
+    restart: always
+    env_file:
+      - postgres.env
+    ports:
+      - "80:80"
+    depends_on:
+      - db
+  botentry:
+    build: .
+    command: >
+      sh -c "python manage.py makemigrations trades &&
+             python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/code
+    ports:
+      - "8000:8000"
+    env_file:
+      - postgres.env
+      - binance.env
+    depends_on:
+      - db
+      - redis
+  celery:
+    build: .
+    command:  celery -A botentry beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - .:/code
+    env_file:
+      - postgres.env
+      - binance.env
+    depends_on:
+      - botentry
+      - db
+      - redis
+  celery-debug:
+    build: .
+    command:  celery -A botentry worker -l debug
+    volumes:
+      - .:/code
+    env_file:
+      - postgres.env
+      - binance.env
+    depends_on:
+      - botentry
+      - db
+      - redis
+  redis:
+    image: redis:alpine
